@@ -9,23 +9,38 @@
  -- Additional rules govern the times and the pay rate is specific to families
 
 */
+#define MAX_PAY_ZONES 3
+#define NUM_FAMILY 3
+#define FAM_A 0
+#define FAM_B 1
+#define FAM_C 2
+
+
 class BabySitterPay
 {
 public:
-    // -- // In minutes, 24 * 60
-    int StartTime;
-    int StopTime;
+    struct PayStruct
+    {
+        int PayRate[MAX_PAY_ZONES];
+        int PayZone[MAX_PAY_ZONES];
+    };
+   
+    int CurrentStartTime;
+    int CurrentStopTime;
     int EnteredTime;
-    int Family;
-    bool TimesValid;
+    int CurrentFamily;
+    bool CurrentTimesValid;
 
-    BabySitterPay() { StartTime = 0, StopTime = 0; EnteredTime = 0; Family = 0; TimesValid = 0; };
+    PayStruct CurrentPay[NUM_FAMILY];
+
+    BabySitterPay() ;
     ~BabySitterPay() {};
     int ValidateString(std::string input);
     int ValidateTimes();
 
     int GetPay();
     int GetPay(int rate[3], int time[3]);
+    int GetPay(PayStruct currentSitter);
 
     int TimeInMinutes(int hour, int minutes = 0);
 };
