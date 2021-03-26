@@ -11,6 +11,54 @@
 
 
 /*
+Function:       BabySitterPay
+Description:    Constructor
+Params:         
+*/
+BabySitterPay::BabySitterPay()
+{
+    CurrentStartTime = 0, CurrentStopTime = 0; EnteredTime = 0; CurrentFamily = 0; CurrentTimesValid = 0;
+
+    // -- Changes in rate or zones should be done here
+    for (int i = 0; i < NUM_FAMILY; i++)
+    {
+        switch (i)
+        {
+        default:
+            break;
+        case FAM_A:
+            CurrentPay[i].PayZone[0] = TimeInMinutes(23);
+            CurrentPay[i].PayRate[0] = 15;
+            CurrentPay[i].PayZone[1] = TimeInMinutes(4);
+            CurrentPay[i].PayRate[1] = 20;
+            CurrentPay[i].PayZone[2] = TimeInMinutes(4);
+            CurrentPay[i].PayRate[2] = 0;
+            break;
+        case FAM_B:
+            CurrentPay[i].PayZone[0] = TimeInMinutes(22);
+            CurrentPay[i].PayRate[0] = 12;
+            CurrentPay[i].PayZone[1] = TimeInMinutes(0);
+            CurrentPay[i].PayRate[1] = 8;
+            CurrentPay[i].PayZone[2] = TimeInMinutes(4);
+            CurrentPay[i].PayRate[2] = 16;
+            break;
+        case FAM_C:
+            CurrentPay[i].PayZone[0] = TimeInMinutes(21);
+            CurrentPay[i].PayRate[0] = 21;
+            CurrentPay[i].PayZone[1] = TimeInMinutes(4);
+            CurrentPay[i].PayRate[1] = 15;
+            CurrentPay[i].PayZone[2] = TimeInMinutes(4);
+            CurrentPay[i].PayRate[2] = 0;
+            break;
+        }
+    }
+}
+
+
+
+
+
+/*
 Function:       TimeInMinutes(int hour, int minutes)
 Description:    Utility to convert time into minutes
 Params:         int hour, int minutes, time in hours and minitues
@@ -100,20 +148,19 @@ int BabySitterPay::ValidateString(std::string input)
         // -- AM no adjustment
         if (ampmCh[0] == 'a' || ampmCh[0] == 'A')
         {
-            TimesValid = true;
+            CurrentTimesValid = true;
             return 0;
         }
         // -- If PM add 12 hours to make 24 hour clock
         else if (ampmCh[0] == 'p' || ampmCh[0] == 'P')
         {
             EnteredTime += TimeInMinutes(12); 
-            TimesValid = true;
+            CurrentTimesValid = true;
             return 0;
         }
         ++errorCode;
         // -- No A or P for am pm, error code 10
         return errorCode;
-
     }
     catch (...)
     {
@@ -145,41 +192,41 @@ int BabySitterPay::ValidateTimes()
 
     int errorCode = 0;
     // -- Can't work with negative times
-    if (StartTime < 0 || StopTime < 0)
+    if (CurrentStartTime < 0 || CurrentStopTime < 0)
     {
         errorCode |= 1 << 0;
     }
     // -- Invalid times
-    else if (StartTime > midnight || StopTime > midnight)
+    else if (CurrentStartTime > midnight || CurrentStopTime > midnight)
     {
         errorCode |= 1 << 1;
     }
     // -- Block 1 between 3:01AM and 4:59PM, can't start
-    if (StartTime > latestStart && StartTime < earliestStart)
+    if (CurrentStartTime > latestStart && CurrentStartTime < earliestStart)
     {
         errorCode |= 1 << 2;
     }
     // -- Block 2 between 4:01AM and 5:59 PM can't stop
-    else if (StopTime > latestEnd && StopTime < earliestEnd)
+    else if (CurrentStopTime > latestEnd && CurrentStopTime < earliestEnd)
     {
         errorCode |= 1 << 3;
     }
     // -- Final check , if stop less than start
-    if (StopTime > StartTime && ((StopTime - StartTime) < 60))
+    if (CurrentStopTime > CurrentStartTime && ((CurrentStopTime - CurrentStartTime) < 60))
     {
         errorCode |= 1 << 4;
     }
     // -- No time at all
-    else if (StartTime == StopTime)
+    else if (CurrentStartTime == CurrentStopTime)
     {
         errorCode |= 1 << 5;
     }
     // -- Accross the time zone
-    else if (StartTime > StopTime)
+    else if (CurrentStartTime > CurrentStopTime)
     {
         // -- Add 24 hours to correct
-        int tempStop = StopTime + midnight;
-        int hoursWorked = tempStop - StartTime;
+        int tempStop = CurrentStopTime + midnight;
+        int hoursWorked = tempStop - CurrentStartTime;
         // -- Can only work a maximum of 11 hours
         if (hoursWorked > TimeInMinutes(11))
             errorCode |= 1 << 6;
@@ -188,7 +235,7 @@ int BabySitterPay::ValidateTimes()
             errorCode |= 1 << 7;
     }
     if(errorCode == 0)
-        TimesValid = true;
+        CurrentTimesValid = true;
     return errorCode;
 }
 
@@ -204,32 +251,23 @@ Return:         Required pay
 */
 int BabySitterPay::GetPay()
 {
-    int fam[3][3] = { { TimeInMinutes(23), TimeInMinutes(4), TimeInMinutes(4) },
-        { TimeInMinutes(22), TimeInMinutes(0), TimeInMinutes(4) },
-        { TimeInMinutes(21), TimeInMinutes(4), TimeInMinutes(4) } };
-
-    int rate[3][3] = { {15, 20, 0},
-        {12, 8, 16},
-        {21, 15, 0} };
-
-    return GetPay(rate[Family], fam[Family]);
+    return GetPay(CurrentPay[CurrentFamily]);
 }
 
 
 
 
 /*
-Function:       GetPay(int rate[3], int time[3])
+Function:       GetPay(PayStruct currentSitter)
 Description:    Calculate pay based on hours worked and pay rate across different time zones
                     In the case where worked hour straddles two pay zones, not pay will be calculated
                     E.g. If hour is between 6:30 and 7:30, and pay zone changes at 7, no pay since those are partial hours
                     Requirement was ambigous so this may need to be adjusted if requirements are updated
 
-Params:         int rate[3] - pay rate, there are a max of 3
-                int hours[3] - from start to end there are 3 zones with differing pay
+Params:         PayStruct currentSitter - pay rate and zone, there are a max of 3
 Return:         Pay
 */
-int BabySitterPay::GetPay(int rate[3], int time[3])
+int BabySitterPay::GetPay(PayStruct currentSitter)
 {
     // -- Two key times are noon and midnight
     // -- Times before midnight indicated times between midnight and 4AM 
@@ -238,8 +276,8 @@ int BabySitterPay::GetPay(int rate[3], int time[3])
     const int adjust24 = TimeInMinutes(24);
     //-- This variable will be used to adjust time for calculation
     int newTime[3] = { 0, 0, 0 };
-    int newStart = StartTime;
-    int newStop = StopTime;
+    int newStart = CurrentStartTime;
+    int newStop = CurrentStopTime;
     // -- Will add pay across the different pay zones
     int pay[3] = { 0, 0, 0 };
     // - Add 24 to times past midnight to deal with rollover
@@ -251,13 +289,13 @@ int BabySitterPay::GetPay(int rate[3], int time[3])
     // -- Now loop through the pay zones and adjust for rollover
     for (int i = 0; i < 3; i++)
     {
-        newTime[i] = time[i];
+        newTime[i] = currentSitter.PayZone[i];
         if (newTime[i] < noon)
             newTime[i] += adjust24;
     }
     // -- No search for hours across the pay zones and calculate pay based on rate
-    for(int i = 0; i < 3; i++)
-    { 
+    for (int i = 0; i < 3; i++)
+    {
         // -- First, if the end of work is after the pay zone end, calculate pay and continue
         if (newStop > newTime[i])
         {
@@ -266,9 +304,9 @@ int BabySitterPay::GetPay(int rate[3], int time[3])
             // -- Prior code ensure start is not greater than stop but prevent negative pay
             // -- Also will not deal with fractional hours. Requirement is vague about this,
             // -- -- It doesn't say whether a full hour accross pay zone should be honored with diffent pay rates
-            if(newTime[i] > newStart)
+            if (newTime[i] > newStart)
                 hours = (newTime[i] - newStart) / 60;
-            pay[i] = (hours * rate[i]);
+            pay[i] = (hours * currentSitter.PayRate[i]);
             // -- Now we adust the start time to the new pay zone
             newStart = newTime[i];
         }
@@ -276,9 +314,9 @@ int BabySitterPay::GetPay(int rate[3], int time[3])
         else
         {
             int hours = 0;
-            if(newStop > newStart)
+            if (newStop > newStart)
                 hours = (newStop - newStart) / 60;
-            pay[i] = (hours * rate[i]);
+            pay[i] = (hours * currentSitter.PayRate[i]);
             newStart = newTime[i];
             newStop = newTime[i];
         }
@@ -420,6 +458,78 @@ bool TestForExit(std::string input)
 }
 
 
+bool UnitTests()
+{
+    BabySitterPay unitTestSitter;
+    std::string testInput = "04:59 CM";
+    // -- Test Input errors
+    unitTestSitter.ValidateString(testInput);
+    if (unitTestSitter.CurrentTimesValid == false)
+    {
+        FindInputError(&unitTestSitter, testInput);
+    }
+    testInput = "04:A1 AM";
+    unitTestSitter.ValidateString(testInput);
+    if (unitTestSitter.CurrentTimesValid == false)
+    {
+        FindInputError(&unitTestSitter, testInput);
+    }
+    // -- Test Stop before start
+    testInput = "09:00 PM";
+    unitTestSitter.ValidateString(testInput);
+    unitTestSitter.CurrentStartTime = unitTestSitter.EnteredTime;
+    testInput = "07:00 PM";
+    unitTestSitter.ValidateString(testInput);
+    unitTestSitter.CurrentStopTime = unitTestSitter.EnteredTime;
+    unitTestSitter.ValidateTimes();
+    FindTimeError(&unitTestSitter);
+    PrintNewLine();
+    // -- Test correct input
+    testInput = "06:00 PM";
+    unitTestSitter.ValidateString(testInput);
+    unitTestSitter.CurrentStartTime = unitTestSitter.EnteredTime;
+    testInput = "02:00 AM";
+    unitTestSitter.ValidateString(testInput);
+    unitTestSitter.CurrentStopTime = unitTestSitter.EnteredTime;
+    unitTestSitter.CurrentFamily = 0;
+    if (unitTestSitter.CurrentTimesValid == true)
+    {
+        std::cout << "Total pay for 6PM to 2AM for family A is $" << unitTestSitter.GetPay() << "\r\n\r\n";
+    }
+    unitTestSitter.CurrentFamily = 1;
+    if (unitTestSitter.CurrentTimesValid == true)
+    {
+        std::cout << "Total pay for 6PM to 2AM for family B is $" << unitTestSitter.GetPay() << "\r\n\r\n";
+    }
+    unitTestSitter.CurrentFamily = 2;
+    if (unitTestSitter.CurrentTimesValid == true)
+    {
+        std::cout << "Total pay for 6PM to 2AM for family B is $" << unitTestSitter.GetPay() << "\r\n\r\n";
+    }
+    // -- Test fractional input
+    testInput = "06:30 PM";
+    unitTestSitter.ValidateString(testInput);
+    unitTestSitter.CurrentStartTime = unitTestSitter.EnteredTime;
+    testInput = "02:30 AM";
+    unitTestSitter.ValidateString(testInput);
+    unitTestSitter.CurrentStopTime = unitTestSitter.EnteredTime;
+    unitTestSitter.CurrentFamily = 0;
+    if (unitTestSitter.CurrentTimesValid == true)
+    {
+        std::cout << "Total pay for 6:30PM to 2:30AM for family A is $" << unitTestSitter.GetPay() << "\r\n\r\n";
+    }
+    unitTestSitter.CurrentFamily = 1;
+    if (unitTestSitter.CurrentTimesValid == true)
+    {
+        std::cout << "Total pay for 6:30PM to 2:30AM for family B is $" << unitTestSitter.GetPay() << "\r\n\r\n";
+    }
+    unitTestSitter.CurrentFamily = 2;
+    if (unitTestSitter.CurrentTimesValid == true)
+    {
+        std::cout << "Total pay for 6:30PM to 2:30AM for family B is $" << unitTestSitter.GetPay() << "\r\n\r\n";
+    }
+    return unitTestSitter.CurrentTimesValid;
+}
 
 
 
@@ -445,7 +555,7 @@ void UserPrompt()
         while(!validInput && !exitApp)
         { 
             // -- First get start time
-            newSitter.TimesValid = false;
+            newSitter.CurrentTimesValid = false;
             std::cout << "Enter start time in 12 hour format XX:XX PM";
             PrintNewLine();
             // -- Process input
@@ -454,14 +564,14 @@ void UserPrompt()
             if (exitApp)
                 break;
             newSitter.ValidateString(starttime);
-            validInput = newSitter.TimesValid;
+            validInput = newSitter.CurrentTimesValid;
             if (validInput == false)
             {
                 FindInputError(&newSitter, starttime);
             }
             else
             {
-                newSitter.StartTime = newSitter.EnteredTime;
+                newSitter.CurrentStartTime = newSitter.EnteredTime;
             }
             
             PrintNewLine();
@@ -470,7 +580,7 @@ void UserPrompt()
         // -- Next Get Stop time
         while (!validInput && !exitApp)
         {
-            newSitter.TimesValid = false;
+            newSitter.CurrentTimesValid = false;
             std::cout << "Enter Stop time in 12 hour format XX:XX PM";
             PrintNewLine();
             std::getline(std::cin, starttime);
@@ -478,14 +588,14 @@ void UserPrompt()
             if (exitApp)
                 break;            
             newSitter.ValidateString(starttime);
-            validInput = newSitter.TimesValid;
+            validInput = newSitter.CurrentTimesValid;
             if (validInput == false)
             {
                 FindInputError(&newSitter, starttime);
             }
             else
             {
-                newSitter.StopTime = newSitter.EnteredTime;
+                newSitter.CurrentStopTime = newSitter.EnteredTime;
             }
             PrintNewLine();
         }
@@ -493,9 +603,9 @@ void UserPrompt()
         // -- Now Get Family
         while (!validInput && !exitApp)
         {
-            newSitter.TimesValid = false;
+            newSitter.CurrentTimesValid = false;
             newSitter.ValidateTimes();
-            validInput = newSitter.TimesValid;
+            validInput = newSitter.CurrentTimesValid;
             if (validInput == false)
             { 
                 FindTimeError(&newSitter);
@@ -511,26 +621,26 @@ void UserPrompt()
                     break;
                 if (starttime.compare("A") == 0 || starttime.compare("a") == 0)
                 {
-                    newSitter.TimesValid = true;
-                    newSitter.Family = 0;
+                    newSitter.CurrentTimesValid = true;
+                    newSitter.CurrentFamily = FAM_A;
                 }
                 else if (starttime.compare("B") == 0 || starttime.compare("b") == 0)
                 {
-                    newSitter.TimesValid = true;
-                    newSitter.Family = 1;
+                    newSitter.CurrentTimesValid = true;
+                    newSitter.CurrentFamily = FAM_B;
                 }
                 else if (starttime.compare("C") == 0 || starttime.compare("c") == 0)
                 {
-                    newSitter.TimesValid = true;
-                    newSitter.Family = 2;
+                    newSitter.CurrentTimesValid = true;
+                    newSitter.CurrentFamily = FAM_C;
                 }
                 else
                     std::cout << "Enter A, B or C for family" << "\r\n";
             }
 
-            validInput = newSitter.TimesValid;
+            validInput = newSitter.CurrentTimesValid;
 
-            if (newSitter.TimesValid == true)
+            if (newSitter.CurrentTimesValid == true)
             {
                 std::cout << "Total pay for this session: $" << newSitter.GetPay() << "\r\n\r\n";
 
@@ -542,18 +652,8 @@ void UserPrompt()
 
 int main()
 {
-    std::cout << "Hello World!\n";
+    std::cout << "Eddy Ojode's BabySitter Kata implementation...\n";
     UserPrompt();
-
+    //UnitTests();
 }
 
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
